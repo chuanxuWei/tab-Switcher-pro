@@ -18,7 +18,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var suppressed = Set<Int64>()
     var enabled = true
     var lastError = ""
-    var chromeFront: Bool { NSWorkspace.shared.frontmostApplication?.bundleIdentifier == "com.google.Chrome" }
+    var helpVisible = false
+    // Dependencies are replaceable in the in-process integration tests; no global key injection.
+    var frontmostChrome = { NSWorkspace.shared.frontmostApplication?.bundleIdentifier == "com.google.Chrome" }
+    var readSnapshot: () throws -> Snapshot? = Chrome.snapshot
+    var activateTab: (Tab) throws -> Void = Chrome.activate
+    var readURL: () throws -> String = Chrome.currentURL
+    var writeClipboard: (String) -> Void = { url in
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(url, forType: .string)
+    }
+    var chromeFront: Bool { frontmostChrome() }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -61,6 +71,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        showHelp()
+        return true
+    }
+
     @objc func quit() { NSApp.terminate(nil) }
     @objc func toggle() { enabled.toggle(); cancel(); status.button?.appearsDisabled = !enabled }
     @objc func authorize() {
@@ -70,6 +85,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
     @objc func authorizeCapture() { _ = CGRequestScreenCaptureAccess() }
     @objc func showHelp() {
+        guard !helpVisible else { return }
+        helpVisible = true
+        defer { helpVisible = false }
         let alert = NSAlert()
         alert.messageText = "Tab Switcher Pro"
         alert.informativeText = "⌃ Tab：最近使用顺序切换；松开 Control 确认\n⌃ ⇧ Tab：反向；Esc：取消\n⌘ ⌃ C：复制当前标签链接\n\n请在系统设置 → 隐私与安全性 → 辅助功能中启用本应用，然后点击菜单中的授权并重试。首次访问 Chrome 时允许自动化控制。缩略图需要单独授权屏幕录制。\n\n仅当前 Chrome 窗口。访问过的普通标签缓存预览；无痕窗口不截图。缓存只在内存，退出即清除。\n\n状态：\(tap == nil ? "快捷键尚未获得授权" : "快捷键已就绪")\n\(lastError)"
@@ -140,8 +158,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         DispatchQueue.main.async { [weak self] in
             guard let self, self.chromeFront else { return }
             do {
-                guard let current = try Chrome.snapshot(), current.window == tab.window else { return }
-                try Chrome.activate(tab)
+                guard let current = try self.readSnapshot(), current.window == tab.window else { return }
+                try self.activateTab(tab)
                 self.recency.observe(tab.id)
                 self.poll()
             }
@@ -151,10 +169,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func copyURL() {
         guard chromeFront else { return }
         do {
-            let url = try Chrome.currentURL()
+            let url = try readURL()
             guard !url.isEmpty else { return }
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(url, forType: .string)
+            writeClipboard(url)
             if session == nil {
                 generation += 1
                 let token = generation
@@ -166,14 +183,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         } catch { report(error) }
     }
-    func report(_ error: Error) { lastError = error.localizedDescription; status.button?.toolTip = lastError }
+    func report(_ error: Error) { lastError = error.localizedDescription; status?.button?.toolTip = lastError }
     func poll() {
         guard enabled, chromeFront, session == nil, !CommandLine.arguments.contains("--preview") else { return }
         do {
-            let next = try Chrome.snapshot()
+            let next = try readSnapshot()
             if next?.active != snapshot?.active || next?.tabs != snapshot?.tabs { stableSince = Date() }
             snapshot = next
-            guard let next else { thumbnails.removeAll(); return }
+            guard let next else { thumbnails.removeAll(); capturedURLs.removeAll(); return }
             // Keep MRU across windows, but only offer the front window's tabs.
             recency.observe(next.active)
             // Bound retained state without dropping other windows on every poll.
@@ -202,14 +219,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                       let number = front[kCGWindowNumber as String] as? UInt32,
                       let window = content.windows.first(where: { $0.windowID == number }),
                       session == nil, !overlay.panel.isVisible,
-                      let before = try Chrome.snapshot(), before.active == source.active, before.window == source.window else { return }
+                      let before = try readSnapshot(), before.active == source.active, before.window == source.window else { return }
                 let config = SCStreamConfiguration()
                 config.width = 480
                 config.height = max(1, Int(480 * window.frame.height / max(1, window.frame.width)))
                 config.showsCursor = false
                 let image = try await SCScreenshotManager.captureImage(contentFilter: SCContentFilter(desktopIndependentWindow: window), configuration: config)
                 guard chromeFront, session == nil, !overlay.panel.isVisible,
-                      let after = try Chrome.snapshot(), after.active == source.active, after.window == source.window,
+                      let after = try readSnapshot(), after.active == source.active, after.window == source.window,
                       after.tabs == source.tabs, !after.incognito else { return }
                 thumbnails[source.active] = NSImage(cgImage: image, size: .zero)
                 capturedURLs[source.active] = source.tabs.first(where: { $0.id == source.active })?.url
@@ -219,6 +236,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
+#if !TESTING
 @main
 struct Main {
     static func main() {
@@ -228,3 +246,5 @@ struct Main {
         withExtendedLifetime(delegate) { app.run() }
     }
 }
+
+#endif

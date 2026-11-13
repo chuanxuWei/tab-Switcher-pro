@@ -51,7 +51,7 @@ Chrome 的 [Commands API](https://developer.chrome.com/docs/extensions/reference
 
 ## 验证
 
-`./scripts/test.sh` 检查 MRU 排序、冻结会话、正反向循环、空/单标签、关闭标签清理、最近两页往返、窗口隔离和 40 种列表长度；同时校验 Info.plist。`./scripts/build.sh` 编译并生成本机架构的临时签名应用。
+`./scripts/test.sh` 检查 MRU 排序、冻结会话、正反向循环、空/单标签、关闭标签清理、最近两页往返、窗口隔离和 40 种列表长度；还执行 35 项应用级集成断言（浏览器与剪贴板使用替身，覆盖真实事件处理函数与浮层），同时校验 Info.plist。`./scripts/build.sh` 编译并生成本机架构的临时签名应用。
 
 实机验收清单见 [TESTING.md](TESTING.md)。编译/模型测试通过不等于系统权限、真实键盘释放、Chrome 自动化和截图链路已经通过验收。
 
