@@ -10,4 +10,7 @@ if pgrep -x TabSwitcherPro >/dev/null; then
 fi
 mkdir -p "$HOME/Applications"
 ditto "$SOURCE" "$DEST"
+touch "$DEST"
+REGISTER=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
+if [[ -x "$REGISTER" ]]; then "$REGISTER" -f "$DEST"; fi
 printf 'Installed: %s\nOpen this application in Finder, then grant permissions through System Settings.\n' "$DEST"

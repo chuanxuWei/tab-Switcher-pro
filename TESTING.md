@@ -6,6 +6,8 @@
 - PASS: 35 in-process application integration assertions using the actual AppDelegate keyboard handler, overlay, asynchronous commit and error handling. Browser/clipboard calls are injected fakes; no OS input is posted.
 - PASS: native compile, bundle signature verification, Info.plist validation.
 - PASS: ICNS conversion and round-trip extraction; 1024x1024 largest representation has alpha.
+- PASS (actual UI): reopened installed application from Finder and verified help dialog appears; status correctly reports missing shortcut authorization.
+- PASS (actual UI): Finder screenshot shows the new rose tab-switching icon after refreshing Launch Services registration. Installed ICNS is byte-identical to source.
 - System Settings inspection: Tab Switcher Pro accessibility switch is **off**. A separate app named Tab Switcher has accessibility enabled and may compete for the same shortcut.
 - Real OS interception, Chrome Apple Events, live screen capture, full-screen handling and conflicting third-party shortcut behavior remain **BLOCKED / NOT VERIFIED**, pending the requested system-permission confirmation. No privacy permission was changed.
 - Improved testability by injecting browser and clipboard boundaries; added reopen behavior so double-clicking the running menu-bar app shows its help dialog; clear URL cache when no Chrome window exists.
